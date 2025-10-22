@@ -22,7 +22,7 @@ jobs:
         run: |
           shopify theme push \
             --json \
-            --ignore config/settings_data.json templates/*.json sections/*.json \
+            --ignore config/settings_data.json \
             --theme 187089355098 \
             --store ${{ secrets.SHOPIFY_STORE }} \
             --password ${{ secrets.SHOPIFY_CLI_THEME_TOKEN }} \
