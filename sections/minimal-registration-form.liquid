@@ -1,0 +1,246 @@
+{%- liquid
+  assign section_id = section.id
+-%}
+
+<h2>Create Account</h2>
+
+<form id="MinimalRegistrationForm">
+  
+  <div>
+    <input 
+      type="text" 
+      name="firstName" 
+      placeholder="First Name" 
+      required
+      id="firstName"
+    >
+  </div>
+  
+  <div>
+    <input 
+      type="text" 
+      name="lastName" 
+      placeholder="Last Name" 
+      required
+      id="lastName"
+    >
+  </div>
+  
+  <div>
+    <input 
+      type="email" 
+      name="email" 
+      placeholder="Email" 
+      required
+      id="email"
+    >
+  </div>
+  
+  <div>
+    <input 
+      type="password" 
+      name="password" 
+      placeholder="Password" 
+      required
+      minlength="5"
+      id="password"
+    >
+  </div>
+  
+  <button type="submit" id="submitBtn">
+    Create Account
+  </button>
+  
+  <div id="loadingState" style="display: none;">
+    Creating Account...
+  </div>
+  
+  <div id="successMessage" style="display: none;">
+    Account created successfully!
+  </div>
+  
+  <div id="errorMessage" style="display: none;">
+    <span id="errorText"></span>
+  </div>
+</form>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const form = document.getElementById('MinimalRegistrationForm');
+  const submitBtn = document.getElementById('submitBtn');
+  const loadingState = document.getElementById('loadingState');
+  const successMessage = document.getElementById('successMessage');
+  const errorMessage = document.getElementById('errorMessage');
+  const errorText = document.getElementById('errorText');
+  const inputs = form.querySelectorAll('input[type="text"], input[type="email"], input[type="password"]');
+  const storefrontAccessToken = '{{ section.settings.storefront_access_token }}'.trim();
+  
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    
+    // Lock form
+    lockForm(true);
+    hideMessages();
+    
+    // Get form data using element IDs instead of FormData
+    const customerData = {
+      firstName: document.getElementById('firstName').value,
+      lastName: document.getElementById('lastName').value,
+      email: document.getElementById('email').value,
+      password: document.getElementById('password').value
+    };
+    
+    // Debug: Log form data extraction
+    console.log('Form data extracted:', customerData);
+    console.log('Individual field values:');
+    console.log('firstName:', document.getElementById('firstName').value);
+    console.log('lastName:', document.getElementById('lastName').value);
+    console.log('email:', document.getElementById('email').value);
+    console.log('password:', document.getElementById('password').value);
+    
+    try {
+      const result = await createCustomer(customerData);
+      
+      if (result.success) {
+        showSuccess();
+        form.reset();
+      } else {
+        showError(result.error || 'Registration failed');
+      }
+    } catch (error) {
+      showError('Network error. Please try again.');
+    } finally {
+      // Unlock form
+      lockForm(false);
+    }
+  });
+  
+  async function createCustomer(customerData) {
+    const mutation = `
+      mutation customerCreate($input: CustomerInput!) {
+        customerCreate(input: $input) {
+          userErrors {
+            field
+            message
+          }
+          customer {
+            id
+            email
+            firstName
+            lastName
+          }
+        }
+      }
+    `;
+    
+    const variables = {
+      input: {
+        firstName: customerData.firstName,
+        lastName: customerData.lastName,
+        email: customerData.email
+        // Note: Admin API doesn't support password creation
+      }
+    };
+    
+    // Use Admin API for customer creation
+    const response = await fetch('/admin/api/2024-10/graphql.json', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Shopify-Access-Token': storefrontAccessToken
+      },
+      body: JSON.stringify({
+        query: mutation,
+        variables: variables
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (data.errors) {
+      const error = data.errors[0];
+      console.error('GraphQL Error:', error);
+      return { success: false, error: error.message || 'Registration failed' };
+    }
+    
+    const customerCreate = data.data?.customerCreate;
+    
+    if (customerCreate?.userErrors?.length > 0) {
+      const error = customerCreate.userErrors[0];
+      return { success: false, error: error.message || 'Registration failed' };
+    }
+    
+    if (customerCreate?.customer) {
+      return { success: true, customer: customerCreate.customer };
+    }
+    
+    return { success: false, error: 'Registration failed' };
+  }
+  
+  
+  function lockForm(locked) {
+    submitBtn.disabled = locked;
+    inputs.forEach(input => input.disabled = locked);
+    loadingState.style.display = locked ? 'block' : 'none';
+    submitBtn.textContent = locked ? 'Creating...' : 'Create Account';
+  }
+  
+  function showSuccess() {
+    successMessage.style.display = 'block';
+    errorMessage.style.display = 'none';
+  }
+  
+  function showError(message) {
+    errorText.textContent = message;
+    errorMessage.style.display = 'block';
+    successMessage.style.display = 'none';
+  }
+  
+  function hideMessages() {
+    successMessage.style.display = 'none';
+    errorMessage.style.display = 'none';
+  }
+});
+</script>
+
+{% schema %}
+{
+  "name": "Minimal Registration Form",
+  "tag": "section",
+  "class": "section",
+  "settings": [
+    {
+      "type": "header",
+      "content": "Form Settings"
+    },
+    {
+      "type": "text",
+      "id": "form_title",
+      "label": "Form Title",
+      "default": "Create Account"
+    },
+    {
+      "type": "text",
+      "id": "submit_button_text",
+      "label": "Submit Button Text",
+      "default": "Create Account"
+    },
+    {
+      "type": "header",
+      "content": "API Settings"
+    },
+    {
+      "type": "text",
+      "id": "storefront_access_token",
+      "label": "Storefront API Access Token",
+      "info": "Get this from: Apps → App and sales channel settings → Develop apps → Storefront API"
+    }
+  ],
+  "presets": [
+    {
+      "name": "Minimal Registration Form"
+    }
+  ]
+}
+{% endschema %}
